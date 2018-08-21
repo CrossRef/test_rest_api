@@ -58,7 +58,7 @@
   [query type]
   (cond
     (= type :production) (str production-api query)
-    (= type :staging)(str production-api query)))
+    (= type :staging)(str staging-api query)))
 
 (defn query-api
   [query]
@@ -70,8 +70,9 @@
        production-query (get-query query :production)
        staging-response (query-api staging-query)
        production-response (query-api production-query)]
+       (prn query)
        (rsp/compare-response staging-response production-response)))
-       
+
 
 (defn run-me
     [curated-queries dataset]
