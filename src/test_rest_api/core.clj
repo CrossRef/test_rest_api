@@ -80,14 +80,7 @@
           subset (take 10 query-samples)]
      (for [q subset] (run-query q))))
 
-          ;;{:keys [status headers body error] :as rsp} @(http/get (nth staging-samples 20))]
-          ;;(prn (nth staging-samples 20))
-          ;;(prn error)
-          ;;(prn status)
-          ;;body))
-  ;; next steps:  look for criteria like status, response time, top 2 results in prod, compare them to staging results
-
-
+          
 (defn -main
     "Benchmarks queries against rest-api instances"
     [curated-queries dataset]
