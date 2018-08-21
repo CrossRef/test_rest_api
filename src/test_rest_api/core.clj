@@ -13,10 +13,6 @@
 (def total-sample-size 1062)
 
 (def file-dir "files/")
-(defn me-test
-  [file]
-  (with-open [reader (io/reader file)]
-  (count (line-seq reader))))
 
 (defn file-line-number
   "gets number of lines for a specified file"
@@ -49,28 +45,44 @@
     (doall (line-seq rdr))))
 
 (defn all-queries
+    "concatenates both types of queries"
     [curated-queries dataset]
     (let [cq (read-curated-queries curated-queries)
          samples (sample-lines curated-queries dataset)
          uq (for [s samples] (read-specific-line dataset s))]
          (concat cq uq)))
 
-(defn run-staging
-    [queries]
-    (map #(str staging-api %) queries))
+(defn get-query
+  [query type]
+  (cond
+    (= type :production) (str production-api query)
+    (= type :staging)(str production-api query)))
 
-(defn run-production
-    [queries]
-    (map #(str production-api %) queries))
+(defn query-api
+  [query]
+  @(http/get query))
+
+(defn run-query
+  [query]
+  (let [staging-query (get-query query :staging)
+       production-query (get-query query :production)
+       staging-response (query-api staging-query)
+       production-response (query-api production-query)]
+       (prn query)
+       (prn (:status staging-response))
+       (prn (:status production-response))))
 
 (defn run-me
     [curated-queries dataset]
     (let [query-samples (all-queries curated-queries dataset)
-          staging-samples (run-staging query-samples)
-          production-samples (run-production query-samples)
-          {:keys [status headers body error] :as rsp} @(http/get (nth production-samples 50))]
-          (prn (nth production-samples 50))
-          status))
+          subset (take 10 query-samples)]
+     (for [q subset] (run-query q))))
+
+          ;;{:keys [status headers body error] :as rsp} @(http/get (nth staging-samples 20))]
+          ;;(prn (nth staging-samples 20))
+          ;;(prn error)
+          ;;(prn status)
+          ;;body))
   ;; next steps: query the api, look for criteria like status, response time, top 2 results in prod, compare them to staging results
 
 
