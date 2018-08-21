@@ -72,7 +72,7 @@
           (prn (nth production-samples 50))
           status))
   ;; next steps: query the api, look for criteria like status, response time, top 2 results in prod, compare them to staging results
-  ;; also see how to use the if-let var
+
 
 (defn -main
     "Benchmarks queries against rest-api instances"
