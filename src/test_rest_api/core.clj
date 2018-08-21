@@ -2,7 +2,9 @@
   (:require [clojure.data.csv :as csv]
             [org.httpkit.client :as http]
             [bigml.sampling.reservoir :as reservoir]
-            [clojure.java.io :as io]))
+            [clojure.java.io :as io]
+            [test_rest_api.response :as rsp]
+            [cheshire.core :as json]))
 
 (def staging-api "http://api-es-staging.crossref.org")
 
@@ -68,9 +70,8 @@
        production-query (get-query query :production)
        staging-response (query-api staging-query)
        production-response (query-api production-query)]
-       (prn query)
-       (prn (:status staging-response))
-       (prn (:status production-response))))
+       (rsp/compare-response staging-response production-response)))
+       
 
 (defn run-me
     [curated-queries dataset]
@@ -83,7 +84,7 @@
           ;;(prn error)
           ;;(prn status)
           ;;body))
-  ;; next steps: query the api, look for criteria like status, response time, top 2 results in prod, compare them to staging results
+  ;; next steps:  look for criteria like status, response time, top 2 results in prod, compare them to staging results
 
 
 (defn -main
