@@ -4,6 +4,9 @@
             [clojure.java.io :as io]
             [cheshire.core :as json]))
 (def status-ok 200)
+(defn message
+  [msg]
+  (clojure.string/split msg #","))
 
 (defn convert-to-json
   [rsp]
@@ -26,14 +29,16 @@
 
 
 (defn compare-response
-  [staging-rsp prod-rsp]
+  [query staging-rsp prod-rsp]
   (let [stage-status (:status staging-rsp)
         prod-status (:status prod-rsp)
-        status-equality (status-code stage-status prod-status)]
-  (when (and status-equality (ok? stage-status))
-      (cmp-results (:body staging-rsp) (:body prod-rsp)))))
+        equal-status (status-code stage-status prod-status)]
+  (when (and equal-status (ok? stage-status))
+      (cmp-results (:body staging-rsp) (:body prod-rsp)))
+  (when-not equal-status
+    (message (str "Status code difference," stage-status "," prod-status ","query)))))
+  ;;write out to a message holder))
 
-  ;; check status code equality
   ;; if 200, check body
   ;; heartbeat response is different -- look into that
   ;; body - first two results in prod

@@ -70,8 +70,7 @@
        production-query (get-query query :production)
        staging-response (query-api staging-query)
        production-response (query-api production-query)]
-       (prn query)
-       (rsp/compare-response staging-response production-response)))
+       (rsp/compare-response query staging-response production-response)))
 
 
 (defn run-me
@@ -80,7 +79,7 @@
           subset (take 10 query-samples)]
      (for [q subset] (run-query q))))
 
-          
+
 (defn -main
     "Benchmarks queries against rest-api instances"
     [curated-queries dataset]
