@@ -28,7 +28,7 @@
   [stage prod]
   )
 
-(defn cmp-instances
+(defn cmp-top-2-results
   [stage prod]
   (let [stage-body (convert-to-json stage)
         prod-body  (convert-to-json prod)
@@ -41,18 +41,38 @@
           (assoc {} :prod prod-top-2-results :stage stage-top-2-results)
           (message (str "Total result number mismatch:," stage-results-num ","  prod-results-num)))))
 
+(defn chk-result-totals
+  [results log]
+  (let [stage-body (convert-to-json (:stage results))
+        prod-body  (convert-to-json (:prod results))
+        stage-results-num (:total-results (:message stage-body))
+        prod-results-num (:total-results (:message prod-body))
+        result-num-match (compare-result-num stage-results-num prod-results-num)
+        err-msg (str "Total number of results mismatch")]
+        (when-not result-num-match
+            (log {:msg err-msg :stage stage-results-num :production prod-results-num :query (:query results)}))))
+
 (defn status-code-check
-  [query staging-rsp prod-rsp]
-  (let [stage-status (:status staging-rsp)
-        prod-status  (:status prod-rsp)
-        equal-status (status-code stage-status prod-status)]
-  (if (and equal-status (ok? stage-status))
-      (cmp-instances (:body staging-rsp) (:body prod-rsp))
-      (message (str "Status code difference," stage-status "," prod-status ","query)))))
+  [results log]
+  (let [stage-status (:status (:stage results))
+        prod-status  (:status (:prod results))
+        equal-status? (status-code stage-status prod-status)
+        err-msg (str "non 200 status code errors")]
+        (when-not (and equal-status? (ok? stage-status))
+             (log {:msg err-msg :stage stage-status :production prod-status :query (:query results)}))))
 
 (defn compare-response
   [query staging-rsp prod-rsp]
-  (status-code-check query staging-rsp prod-rsp))
+  (let [result-log (atom [])
+        log-f (fn [item]
+                (swap! result-log
+                       #(cons item %)))]
+        (prn t)
+        (status-code-check {:stage staging-rsp :prod prod-rsp :query query} log-f)
+        (when (= (count @result-log) 0)
+           (chk-result-totals {:stage (:body staging-rsp) :prod (:body prod-rsp) :query query} log-f))
+        @result-log))
+
 
 
   ;;write out to a message holder))
