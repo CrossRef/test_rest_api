@@ -29,6 +29,11 @@
 
   )
 
+;;(def tests
+  ;;[compare-result-sets
+  ;;compare-json-results]
+  ;;)
+
 (defn get-top-2-results
   [stage prod]
   (let [stage-body (convert-to-json stage)
@@ -44,10 +49,12 @@
         stage-results-num (:total-results (:message stage-body))
         prod-results-num (:total-results (:message prod-body))
         result-num-match (compare-result-num stage-results-num prod-results-num)
-        err-msg (str "Total number of results mismatch")]
-        (if result-num-match
-            result-num-match
-            (log {:type "result-total-error" :msg err-msg :stage stage-results-num :production prod-results-num :query (:query results)}))))
+        err-msg "Total number of results mismatch, 0 results found"
+        warn-msg "Total number of results mismatch"]
+        (when-not result-num-match
+          (if (or (= stage-results-num 0) (= prod-results-num 0))
+            (log {:type "result-total-error" :msg err-msg :stage stage-results-num :production prod-results-num :query (:query results)})
+            (log {:type "result-total-warn" :msg warn-msg :stage stage-results-num :production prod-results-num :query (:query results)})))))
 
 (defn status-code-check
   [results log]
@@ -55,8 +62,7 @@
         prod-status  (:status (:prod results))
         equal-status? (status-code stage-status prod-status)
         err-msg (str "non 200 status code errors")]
-        (if (and equal-status? (ok? stage-status))
-             equal-status?
+        (when-not (and equal-status? (ok? stage-status))
              (log {:type "status-error" :msg err-msg :stage stage-status :production prod-status :query (:query results)}))))
 
 (defn compare-response
@@ -67,6 +73,7 @@
                        #(cons item %)))]
         (status-code-check {:stage staging-rsp :prod prod-rsp :query query} log-f)
         (when (= (count (filter #(and (= (:type %) "status-error") (= (:query %) query)) @result-log)) 0)
+            ;; should total result number be checked?
            (chk-result-totals {:stage (:body staging-rsp) :prod (:body prod-rsp) :query query} log-f)
            (when (= (count (filter #(and (= (:type %) "result-total-error") (= (:query %) query)) @result-log)) 0)
            (prn "passing query: " query)))
