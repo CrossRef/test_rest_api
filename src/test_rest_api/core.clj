@@ -76,7 +76,7 @@
 (defn run-me
     [curated-queries dataset]
     (let [query-samples (all-queries curated-queries dataset)
-          subset (take 20 query-samples)]
+          subset (take 5 query-samples)]
      (for [q subset] (run-query q))))
 
 

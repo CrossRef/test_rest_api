@@ -26,20 +26,16 @@
 
 (defn cmp-results
   [stage prod]
+
   )
 
-(defn cmp-top-2-results
+(defn get-top-2-results
   [stage prod]
   (let [stage-body (convert-to-json stage)
         prod-body  (convert-to-json prod)
-        stage-results-num (:total-results (:message stage-body))
-        prod-results-num (:total-results (:message prod-body))
         stage-top-2-results (take 2 (:items (:message stage-body)))
-        prod-top-2-results (take 2 (:items (:message prod-body)))
-        result-num-match (compare-result-num stage-results-num prod-results-num)]
-        (if result-num-match
-          (assoc {} :prod prod-top-2-results :stage stage-top-2-results)
-          (message (str "Total result number mismatch:," stage-results-num ","  prod-results-num)))))
+        prod-top-2-results (take 2 (:items (:message prod-body)))]
+        (assoc {} :prod prod-top-2-results :stage stage-top-2-results)))
 
 (defn chk-result-totals
   [results log]
@@ -49,8 +45,9 @@
         prod-results-num (:total-results (:message prod-body))
         result-num-match (compare-result-num stage-results-num prod-results-num)
         err-msg (str "Total number of results mismatch")]
-        (when-not result-num-match
-            (log {:msg err-msg :stage stage-results-num :production prod-results-num :query (:query results)}))))
+        (if result-num-match
+            result-num-match
+            (log {:type "result-total-error" :msg err-msg :stage stage-results-num :production prod-results-num :query (:query results)}))))
 
 (defn status-code-check
   [results log]
@@ -58,8 +55,9 @@
         prod-status  (:status (:prod results))
         equal-status? (status-code stage-status prod-status)
         err-msg (str "non 200 status code errors")]
-        (when-not (and equal-status? (ok? stage-status))
-             (log {:msg err-msg :stage stage-status :production prod-status :query (:query results)}))))
+        (if (and equal-status? (ok? stage-status))
+             equal-status?
+             (log {:type "status-error" :msg err-msg :stage stage-status :production prod-status :query (:query results)}))))
 
 (defn compare-response
   [query staging-rsp prod-rsp]
@@ -68,15 +66,13 @@
                 (swap! result-log
                        #(cons item %)))]
         (status-code-check {:stage staging-rsp :prod prod-rsp :query query} log-f)
-        (when (= (count @result-log) 0)
-           (chk-result-totals {:stage (:body staging-rsp) :prod (:body prod-rsp) :query query} log-f))
+        (when (= (count (filter #(and (= (:type %) "status-error") (= (:query %) query)) @result-log)) 0)
+           (chk-result-totals {:stage (:body staging-rsp) :prod (:body prod-rsp) :query query} log-f)
+           (when (= (count (filter #(and (= (:type %) "result-total-error") (= (:query %) query)) @result-log)) 0)
+           (prn "passing query: " query)))
         @result-log))
 
 
-
-  ;;write out to a message holder))
-
-  ;; if 200, check body
   ;; heartbeat response is different -- look into that
   ;; body - first two results in prod
   ;; check if they occur in the results of staging
