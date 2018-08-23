@@ -52,7 +52,6 @@
 
 (defn compare-response
   [query staging-rsp prod-rsp]
-  (prn query)
   (status-code-check query staging-rsp prod-rsp))
 
 

@@ -76,13 +76,12 @@
 (defn run-me
     [curated-queries dataset]
     (let [query-samples (all-queries curated-queries dataset)
-          subset (take 10 query-samples)]
+          subset (take 20 query-samples)]
      (for [q subset] (run-query q))))
 
 
 (defn -main
     "Benchmarks queries against rest-api instances"
     [curated-queries dataset]
-    ;(prn @(http/get "http://example.com"))
     (if-let [query-samples (<= (rest-sample-size curated-queries) 0)]  (read-curated-queries curated-queries)
     (all-queries curated-queries dataset)))
