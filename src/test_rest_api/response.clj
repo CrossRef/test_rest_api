@@ -67,7 +67,6 @@
         log-f (fn [item]
                 (swap! result-log
                        #(cons item %)))]
-        (prn t)
         (status-code-check {:stage staging-rsp :prod prod-rsp :query query} log-f)
         (when (= (count @result-log) 0)
            (chk-result-totals {:stage (:body staging-rsp) :prod (:body prod-rsp) :query query} log-f))
