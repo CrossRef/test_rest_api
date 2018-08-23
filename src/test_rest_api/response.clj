@@ -37,10 +37,9 @@
         stage-top-2-results (take 2 (:items (:message stage-body)))
         prod-top-2-results (take 2 (:items (:message prod-body)))
         result-num-match (compare-result-num stage-results-num prod-results-num)]
-
-        (if (not result-num-match)
-          (message (str "Total result number mismatch:," stage-results-num ","  prod-results-num)))
-          (assoc {} :prod prod-top-2-results :stage stage-top-2-results)))
+        (if result-num-match
+          (assoc {} :prod prod-top-2-results :stage stage-top-2-results)
+          (message (str "Total result number mismatch:," stage-results-num ","  prod-results-num)))))
 
 (defn status-code-check
   [query staging-rsp prod-rsp]
