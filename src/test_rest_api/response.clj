@@ -30,19 +30,22 @@
    {:type "both results different order - exists first page" :score 1}
    {:type "exact match - 1 result, not exact match - another result" :score 3}
    {:type "exact match - 1 result, not exact match - another result" :score 2}])
-;;(def tests
-  ;;[compare-result-sets
-  ;;compare-json-results]
-  ;;)
+
+(defn compare-results
+  [results log]
+  (let [prod-2-results (take 2 (:items (:message (convert-to-json (:prod results)))))
+        stage-results (:items (:message (convert-to-json (:stage results))))]
+        (when-not (clojure.set/subset? (set prod-2-results) (set stage-results))
+           (log {:type "no-results-exist-error" :msg "Top 2 production results don't exist in first page of stage results" :query (:query results)}))))
+
 (defn chk-json-keys
   [results log]
   (let [stage-body (convert-to-json (:stage results))
-        prod-body  (convert-to-json (:prod results))]
-        ;stage-keys (into [] (keys (take 1 (:items (:message stage-body)))))
-        ;prod-keys (into [] (keys (take 1 (:items (:message prod-body)))))]
-        stage-body))
-        ;;when-not (= stage-keys prod-keys)
-          ;;(log {:type "json-keys-mismatch" :stage stage-keys :prod prod-keys :query (:query results)})))
+        prod-body  (convert-to-json (:prod results))
+        stage-keys (into [] (keys (first (take 1 (:items (:message (first stage-body)))))))
+        prod-keys (into [] (keys (first (take 1 (:items (:message (first prod-body)))))))]
+        (when-not (= stage-keys prod-keys)
+          (log {:type "json-keys-mismatch" :stage stage-keys :prod prod-keys :query (:query results)}))))
 
 (defn get-top-prod-2-results
   [stage prod]
@@ -85,8 +88,9 @@
         (when (= (count (filter #(and (= (:type %) "status-error") (= (:query %) query)) @result-log)) 0)
            (chk-result-totals {:stage (:body staging-rsp) :prod (:body prod-rsp) :query query} log-f)
            (when (= (count (filter #(and (= (:type %) "result-total-error") (= (:query %) query)) @result-log)) 0)
-             (chk-json-keys {:stage (:body staging-rsp) :prod (:body prod-rsp) :query query} log-f)))))
-        ;@result-log))
+             (chk-json-keys {:stage (:body staging-rsp) :prod (:body prod-rsp) :query query} log-f)
+             (compare-results {:stage (:body staging-rsp) :prod (:body prod-rsp) :query query} log-f)))
+        @result-log))
 
 
   ;; heartbeat response is different -- look into that
