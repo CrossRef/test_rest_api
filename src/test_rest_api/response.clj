@@ -32,51 +32,50 @@
    {:type "exact match - 1 result, not exact match - another result" :score 3}
    {:type "exact match - 1 result, not exact match - another result" :score 2}])
 
-
-
-
-(defn compare-results
-  [n log {prod :prod stage :stage :query query}]
-  (let [intersect (top-n-intersection n prod stage)]
-   (if intersect)
-   ;; move to a separate function
-      (for [x (get-position n prod stage)]
-         (let [prod-position (first x)
-               stage-position (second x)]
-               (cond
-                (= prod-position stage-position)
-                (log {:type "result-position-match" :msg "exact match" :stage "get stage result" :prod "get prod result" :query query})
-                (= stage-position -1)
-                (log {:type "result-no-match" :msg "no match" :stage "get stage result" :prod "get prod result" :query query})
-                :else
-                (log {:type "result-first-page" :msg "not an exact match" :stage (str "stage order: " stage-position) :prod (str "prod order: " prod-position) :query query}))))
-        (log {:type "no-matching-results-found" :msg "Top 2 production results not found in the first page of stage results" :stage "stage ids" :prod "prod ids" :query query})))
-
 (defn api-results->doi-seq
-  [rsp-body]
-  (->> rsp-body convert-to-json :message :items (map :DOI)))
+ [rsp-body]
+ (->> rsp-body convert-to-json :message :items (map :DOI)))
 
 (defn api-results
-  [rsp-body]
-  (->> rsp-body convert-to-json :message :items))
-
+ [rsp-body]
+ (->> rsp-body convert-to-json :message :items))
 
 (defn get-position
-  "return mapping of prod to staging index of top n results"
-  ;[n {prod :prod stage :stage}]
+ "return mapping of prod to staging index of top n results"
+ ;[n {prod :prod stage :stage}]
   [n prod stage]
   (let [prod-dois (->> prod api-results->doi-seq (take n))
         stage-dois (-> stage api-results->doi-seq)
         stage-prod-position (map #(.indexOf stage-dois %) prod-dois)]
-   (into {} (map-indexed vector stage-prod-position))))
+  (into {} (map-indexed vector stage-prod-position))))
 
 
 (defn top-n-intersection
-  ;[n {prod :prod stage :stage}]
-  [n prod stage]
-  (let [prod-dois (->> prod api-results->doi-seq (take n) set)
-        stage-dois (-> stage api-results->doi-seq set)]
-        (clojure.set/intersection prod-dois stage-dois)))
+ ;[n {prod :prod stage :stage}]
+ [n prod stage]
+ (let [prod-dois (->> prod api-results->doi-seq (take n) set)
+       stage-dois (-> stage api-results->doi-seq set)]
+ (clojure.set/intersection prod-dois stage-dois)))
+
+(defn process-position
+  [n prod stage query log]
+  (for [x (get-position n prod stage)]
+      (let [prod-position (first x)
+            stage-position (second x)]
+      (cond
+         (= prod-position stage-position)
+            (log {:type "result-position-match" :msg "exact match" :stage "get stage result" :prod "get prod result" :query query})
+         (= stage-position -1)
+            (log {:type "result-no-match" :msg "no match" :stage "get stage result" :prod "get prod result" :query query})
+         :else
+            (log {:type "result-first-page" :msg "not an exact match" :stage (str "stage order: " stage-position) :prod (str "prod order: " prod-position) :query query})))))
+
+(defn compare-results
+  [n log {prod :prod stage :stage query :query}]
+  (let [intersect (top-n-intersection n prod stage)]
+    (if intersect
+        (process-position n prod stage query log)
+        (log {:type "no-matching-results-found" :msg "Top 2 production results not found in the first page of stage results" :stage "stage ids" :prod "prod ids" :query query}))))
 
 (defn chk-json-keys
   [results log]
@@ -156,9 +155,10 @@
               (chk-result-totals {:stage (:body staging-rsp) :prod (:body prod-rsp) :query query} log-f)
               (when (= (count (filter #(and (= (:type %) "result-total-error") (= (:query %) query)) @result-log)) 0)
                 (chk-json-keys {:stage (:body staging-rsp) :prod (:body prod-rsp) :query query} log-f)
-                (top-n-intersection 2 {:stage (:body staging-rsp) :prod (:body prod-rsp)})
-                (get-position 2 {:stage (:body staging-rsp) :prod (:body prod-rsp)}))))))
-        ;@result-log))
+                (compare-results 2 log-f {:prod (:body prod-rsp) :stage (:body staging-rsp) :query query}))))
+                ;(top-n-intersection 2 {:stage (:body staging-rsp) :prod (:body prod-rsp)})
+                ;(get-position 2 {:stage (:body staging-rsp) :prod (:body prod-rsp)}))))))
+        @result-log))
 
 
   ;; heartbeat response is different -- look into that
