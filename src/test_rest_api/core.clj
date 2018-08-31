@@ -46,6 +46,8 @@
     (with-open [rdr (io/reader (str file-dir curated-queries))]
     (doall (line-seq rdr))))
 
+
+
 (defn all-queries
     "concatenates both types of queries"
     [curated-queries dataset]

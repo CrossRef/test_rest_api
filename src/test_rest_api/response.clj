@@ -33,8 +33,24 @@
    {:type "exact match - 1 result, not exact match - another result" :score 2}])
 
 
-;(defn compare-results
-  ;[n log {prod :prod stage :stage}]))
+
+
+(defn compare-results
+  [n log {prod :prod stage :stage :query query}]
+  (let [intersect (top-n-intersection n prod stage)]
+   (if intersect)
+   ;; move to a separate function
+      (for [x (get-position n prod stage)]
+         (let [prod-position (first x)
+               stage-position (second x)]
+               (cond
+                (= prod-position stage-position)
+                (log {:type "result-position-match" :msg "exact match" :stage "get stage result" :prod "get prod result" :query query})
+                (= stage-position -1)
+                (log {:type "result-no-match" :msg "no match" :stage "get stage result" :prod "get prod result" :query query})
+                :else
+                (log {:type "result-first-page" :msg "not an exact match" :stage (str "stage order: " stage-position) :prod (str "prod order: " prod-position) :query query}))))
+        (log {:type "no-matching-results-found" :msg "Top 2 production results not found in the first page of stage results" :stage "stage ids" :prod "prod ids" :query query})))
 
 (defn api-results->doi-seq
   [rsp-body]
@@ -47,7 +63,8 @@
 
 (defn get-position
   "return mapping of prod to staging index of top n results"
-  [n {prod :prod stage :stage}]
+  ;[n {prod :prod stage :stage}]
+  [n prod stage]
   (let [prod-dois (->> prod api-results->doi-seq (take n))
         stage-dois (-> stage api-results->doi-seq)
         stage-prod-position (map #(.indexOf stage-dois %) prod-dois)]
@@ -55,7 +72,8 @@
 
 
 (defn top-n-intersection
-  [n {prod :prod stage :stage}]
+  ;[n {prod :prod stage :stage}]
+  [n prod stage]
   (let [prod-dois (->> prod api-results->doi-seq (take n) set)
         stage-dois (-> stage api-results->doi-seq set)]
         (clojure.set/intersection prod-dois stage-dois)))
@@ -67,7 +85,7 @@
         stage-keys (into [] (keys (first (take 1 (:items (:message (first stage-body)))))))
         prod-keys (into [] (keys (first (take 1 (:items (:message (first prod-body)))))))]
         (when-not (= stage-keys prod-keys)
-          (log {:type "json-keys-mismatch" :stage stage-keys :prod prod-keys :query (:query results)}))))
+          (log {:type "json-keys-mismatch" :msg "json keys don't match" :stage stage-keys :prod prod-keys :query (:query results)}))))
 
 
 (defn chk-result-totals
