@@ -51,7 +51,6 @@
 
 
 (defn top-n-intersection
- ;[n {prod :prod stage :stage}]
  [n prod stage]
  (let [prod-dois (->> prod api-results->doi-seq (take n) set)
        stage-dois (-> stage api-results->doi-seq set)]
@@ -64,18 +63,25 @@
             stage-position (second x)]
       (cond
          (= prod-position stage-position)
-            (log {:type "result-position-match" :msg "exact match" :stage "get stage result" :prod "get prod result" :query query})
+             :exact-match
          (= stage-position -1)
-            (log {:type "result-no-match" :msg "no match" :stage "get stage result" :prod "get prod result" :query query})
+            :no-match
          :else
-            (log {:type "result-first-page" :msg "not an exact match" :stage (str "stage order: " stage-position) :prod (str "prod order: " prod-position) :query query})))))
+            :first-page))))
 
 (defn compare-results
   [n log {prod :prod stage :stage query :query}]
-  (let [intersect (top-n-intersection n prod stage)]
-    (if intersect
-        (process-position n prod stage query log)
-        (log {:type "no-matching-results-found" :msg "Top 2 production results not found in the first page of stage results" :stage "stage ids" :prod "prod ids" :query query}))))
+  (let [intersect (top-n-intersection n prod stage)
+        result-check (if (not (empty? intersect)) (process-position n prod stage query log) (log {:type "no-matching-results-found" :msg "Top 2 production results not found in the first page of stage results" :stage "stage ids" :prod "prod ids" :query query}))]
+        (when (some #(= :exact-match %) result-check)
+           (log {:type "result-position-match" :msg "exact match" :stage "get stage result" :prod "get prod result" :query query}))
+        (when (some #(= :no-match %) result-check)
+          (log {:type "result-no-match" :msg "no match" :stage "get stage result" :prod "get prod result" :query query}))
+        (when (some #(= :first-page %) result-check)
+            (log {:type "result-first-page" :msg "not an exact match" :stage "stage-blah" :prod "prod-blah" :query query}))
+        (when-not (= (type result-check) clojure.lang.LazySeq) result-check)
+
+))
 
 (defn chk-json-keys
   [results log]
@@ -156,8 +162,6 @@
               (when (= (count (filter #(and (= (:type %) "result-total-error") (= (:query %) query)) @result-log)) 0)
                 (chk-json-keys {:stage (:body staging-rsp) :prod (:body prod-rsp) :query query} log-f)
                 (compare-results 2 log-f {:prod (:body prod-rsp) :stage (:body staging-rsp) :query query}))))
-                ;(top-n-intersection 2 {:stage (:body staging-rsp) :prod (:body prod-rsp)})
-                ;(get-position 2 {:stage (:body staging-rsp) :prod (:body prod-rsp)}))))))
         @result-log))
 
 
