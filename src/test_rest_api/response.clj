@@ -38,7 +38,11 @@
 
 (defn process-compound-key
   [rsp-body id]
-    (apply str (map #(% rsp-body) id)))
+     (for [r rsp-body] (apply str (map #(% r) id))))
+    ;(prn id)
+    ;(prn rsp-body)
+    ;(apply str (map #(% rsp-body) id)))
+    ;rsp-body)
 
 (defn api-results->plural-id
   [rsp-body id]
