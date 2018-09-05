@@ -36,6 +36,17 @@
  [rsp-body]
  (->> rsp-body convert-to-json :message :items (map :DOI)))
 
+(defn process-compound-key
+  [rsp-body id]
+    (apply str (map #(% rsp-body) id)))
+
+(defn api-results->plural-id
+  [rsp-body id]
+  (let [body (->> rsp-body convert-to-json :message :items)]
+    (if (= (type id) clojure.lang.Keyword)
+      (map id body)
+      (process-compound-key body id))))
+
 (defn api-results
  [rsp-body]
  (->> rsp-body convert-to-json :message :items))
@@ -79,9 +90,7 @@
           (log {:type "result-no-match" :msg "no match" :stage "get stage result" :prod "get prod result" :query query}))
         (when (some #(= :first-page %) result-check)
             (log {:type "result-first-page" :msg "not an exact match" :stage "stage-blah" :prod "prod-blah" :query query}))
-        (when-not (= (type result-check) clojure.lang.LazySeq) result-check)
-
-))
+        (when-not (= (type result-check) clojure.lang.LazySeq) result-check)))
 
 (defn chk-json-keys
   [results log]
@@ -117,7 +126,10 @@
              (log {:type "status-error" :msg err-msg :stage stage-status :production prod-status :query (:query results)}))))
 
 (def available-resources
-  {:works :DOI :funders :id :members :id :licenses :URL :journals [:title :publisher]})
+  {:works :DOI :funders :id :members :id :licenses :URL :journals [:title :publisher] :types :id})
+
+(def singular-query
+  {:prefixes :member})
 
 (def ar-vector
   (into [] (map name (keys available-resources))))
@@ -127,7 +139,11 @@
 
 (defn split-query
   [query]
-  (filter #(not (= % version)) (remove clojure.string/blank? (clojure.string/split query #"\/"))))
+  (let [split-q (filter #(not (= % version)) (remove clojure.string/blank? (clojure.string/split query #"[]\/|?]")))
+      last-fragment (last split-q)]
+    (if (re-find #"\?" query)
+       (remove #(= % last-fragment) split-q)
+       split-q)))
 
 (defn plural-query?
   [query]
@@ -140,16 +156,20 @@
 (defn get-unique-id-type
   [query]
   (let [q (into [] (split-query query))
-        first-route (.indexOf ar-vector (first q))]
-   (if (> first-route -1)
-      ((keyword (first q)) available-resources)
-      false)))
-
-(defn compare-response2
-  [query staging-rsp prod-rsp]
-  (plural-query? query))
+        first-route (first q)
+        last-route (last q)]
+   (cond
+      (some #(= % last-route) ar-vector) ((keyword last-route) available-resources)
+      (some #(= % first-route) ar-vector) ((keyword first-route) available-resources)
+      (some #(= % (keyword first-route)) (keys singular-query)) ((keyword first-route) singular-query)
+      :else false)))
 
 (defn compare-response
+  [query staging-rsp prod-rsp]
+  (let [id (get-unique-id-type query)]
+     (api-results->plural-id (:body prod-rsp) id)))
+
+(defn compare-response2
   [query staging-rsp prod-rsp]
   (let [result-log (atom [])
         log-f (fn [item]
