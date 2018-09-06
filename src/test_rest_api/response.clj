@@ -11,6 +11,8 @@
 
 (def query (atom ""))
 
+(def result-id (atom ""))
+
 (defn set-query [q]
   (reset! query q))
 
@@ -18,134 +20,6 @@
 
 (defn set-staging-rsp [rsp] (reset! staging-rsp rsp))
 
-(def results-id (delay (get-unique-id-type @query)))
-
-(def status-ok 200)
-
-(defn message
-  [msg]
-  (clojure.string/split msg #","))
-
-(defn convert-to-json
-  [rsp]
-  (json/parse-string rsp true))
-
-(defn status-code
-  [stage prod]
-  (= stage prod))
-
-(defn ok?
-  [status]
-  (= status-ok status))
-
-(defn compare-result-num
-  [stage-results prod-results]
-  (= stage-results prod-results))
-
-
-(def score
-  [{:type "first page-no existence" :score 0}
-   {:type "both results different order - exists first page" :score 1}
-   {:type "exact match - 1 result, not exact match - another result" :score 3}
-   {:type "exact match - 1 result, not exact match - another result" :score 2}]
-)
-
-(defn process-compound-key
-  [rsp-body id]
-     (for [r rsp-body] (apply str (map #(% r) id))))
-
-(defn api-results->plural-id
-  [rsp-body id]
-  (let [body (->> rsp-body convert-to-json :message :items)]
-    (if (= (type id) clojure.lang.Keyword)
-      (map id body)
-      (process-compound-key body id))))
-
-
-(defn api-results->doi-seq
- [rsp-body]
- (->> rsp-body convert-to-json :message :items (map :DOI)))
-
-(defn api-results
- [rsp-body]
- (->> rsp-body convert-to-json :message :items))
-
-(defn get-position
- "return mapping of prod to staging index of top n results"
- ;[n {prod :prod stage :stage}]
-  [n prod stage]
-  (let [prod-dois (->> prod api-results->doi-seq (take n))
-        stage-dois (-> stage api-results->doi-seq)
-        stage-prod-position (map #(.indexOf stage-dois %) prod-dois)]
-  (into {} (map-indexed vector stage-prod-position))))
-
-
-(defn top-n-intersection
- [n prod stage]
- (let [prod-dois (->> prod api-results->doi-seq (take n) set)
-       stage-dois (-> stage api-results->doi-seq set)]
- (clojure.set/intersection prod-dois stage-dois)))
-
-(defn process-position
-  [n prod stage query log]
-  (for [x (get-position n prod stage)]
-      (let [prod-position (first x)
-            stage-position (second x)]
-      (cond
-         (= prod-position stage-position)
-             :exact-match
-         (= stage-position -1)
-            :no-match
-         :else
-            :first-page))))
-
-(defn compare-results
-  [n log {prod :prod stage :stage query :query}]
-  (let [intersect (top-n-intersection n prod stage)
-        result-check (if (not (empty? intersect)) (process-position n prod stage query log) (log {:type "no-matching-results-found" :msg "Top 2 production results not found in the first page of stage results" :stage "stage ids" :prod "prod ids" :query query}))]
-        (when (some #(= :exact-match %) result-check)
-           (log {:type "result-position-match" :msg "exact match" :stage "get stage result" :prod "get prod result" :query query}))
-        (when (some #(= :no-match %) result-check)
-          (log {:type "result-no-match" :msg "no match" :stage "get stage result" :prod "get prod result" :query query}))
-        (when (some #(= :first-page %) result-check)
-            (log {:type "result-first-page" :msg "not an exact match" :stage "stage-blah" :prod "prod-blah" :query query}))
-        (when-not (= (type result-check) clojure.lang.LazySeq) result-check)
-
-))
-
-(defn chk-json-keys
-  [results log]
-  (let [stage-body (convert-to-json (:stage results))
-        prod-body  (convert-to-json (:prod results))
-        stage-keys (into [] (keys (first (take 1 (:items (:message (first stage-body)))))))
-        prod-keys (into [] (keys (first (take 1 (:items (:message (first prod-body)))))))]
-        (when-not (= stage-keys prod-keys)
-          (log {:type "json-keys-mismatch" :msg "json keys don't match" :stage stage-keys :prod prod-keys :query (:query results)}))))
-
-
-(defn chk-result-totals
-  [results log]
-  (let [stage-body (convert-to-json (:stage results))
-        prod-body  (convert-to-json (:prod results))
-        stage-results-num (:total-results (:message stage-body))
-        prod-results-num (:total-results (:message prod-body))
-        result-num-match (compare-result-num stage-results-num prod-results-num)
-        err-msg "Total number of results mismatch, 0 results found"
-        warn-msg "Total number of results mismatch"]
-        (prn @results-id)
-        (when-not result-num-match
-          (if (or (= stage-results-num 0) (= prod-results-num 0))
-            (log {:type "result-total-error" :msg err-msg :stage stage-results-num :production prod-results-num :query (:query results)})
-            (log {:type "result-total-warn" :msg warn-msg :stage stage-results-num :production prod-results-num :query (:query results)})))))
-
-(defn status-code-check
-  [log]
-  (let [stage-status (:status @staging-rsp)
-        prod-status  (:status @prod-rsp)
-        equal-status? (status-code stage-status prod-status)
-        err-msg (str "non 200 status code errors")]
-        (when-not (and equal-status? (ok? stage-status))
-             (log {:type "status-error" :msg err-msg :stage stage-status :production prod-status :query @query}))))
 
 (def available-resources
   {:works :DOI :funders :id :members :id :licenses :URL :journals [:title :publisher]})
@@ -157,21 +31,7 @@
 (def ar-vector
   (into [] (map name (keys available-resources))))
 
-
-
 (def version "v1")
-
-(defn split-query2
-  [query]
-  (filter #(not (= % version)) (remove clojure.string/blank? (clojure.string/split query #"\/"))))
-
-(defn plural-query2
-  [query]
-  (let [q (into [] (split-query query))
-        last-route (.indexOf ar-vector (last q))]
-   (if (> last-route -1)
-      true
-      false)))
 
 (defn split-query
   [query]
@@ -198,9 +58,136 @@
       (some #(= % (keyword first-route)) (keys singular-query)) ((keyword first-route) singular-query)
       :else false)))
 
+(defn get-results-id
+  [query]
+  (reset! result-id (get-unique-id-type query)))
+
+(def status-ok 200)
+
+(defn message
+  [msg]
+  (clojure.string/split msg #","))
+
+(defn convert-to-json
+  [rsp]
+  (json/parse-string rsp true))
+
+(defn status-code
+  [stage prod]
+  (= stage prod))
+
+(defn ok?
+  [status]
+  (= status-ok status))
+
+(defn compare-result-num
+  [stage-results prod-results]
+  (= stage-results prod-results))
+
+(defn process-compound-key
+  [rsp-body id]
+     (for [r rsp-body] (apply str (map #(% r) id))))
+
+(defn api-results->plural-id
+  [rsp-body]
+  (let [body (->> rsp-body convert-to-json :message :items)
+        id @result-id]
+    (if (= (type id) clojure.lang.Keyword)
+      (map id body)
+      (process-compound-key body id))))
+
+
+(defn api-results->doi-seq
+ [rsp-body]
+ (->> rsp-body convert-to-json :message :items (map :DOI)))
+
+(defn api-results
+ [rsp-body]
+ (->> rsp-body convert-to-json :message :items))
+
+(defn get-position
+ "return mapping of prod to staging index of top n results"
+  [n]
+  (let [prod-ids (take n (api-results->plural-id (:body @prod-rsp)))
+        stage-ids (api-results->plural-id (:body @staging-rsp))
+        stage-prod-position (map #(.indexOf stage-ids %) prod-ids)]
+  (into {} (map-indexed vector stage-prod-position))))
+
+
+(defn top-n-intersection
+ [n]
+ (let [prod-ids (set (take n (api-results->plural-id (:body @prod-rsp))))
+       stage-ids (set (api-results->plural-id (:body @staging-rsp)))]
+   (clojure.set/intersection prod-ids stage-ids)))
+
+(defn process-position
+  [n]
+  (for [x (get-position n)]
+      (let [prod-position (first x)
+            stage-position (second x)]
+      (cond
+         (= prod-position stage-position)
+             :exact-match
+         (= stage-position -1)
+            :no-match
+         :else
+            :first-page))))
+
+(defn compare-results
+  [n log]
+  (let [intersect (top-n-intersection n)
+        result-check (if (not (empty? intersect)) (process-position n) (log {:type "no-matching-results-found" :msg "Top 2 production results not found in the first page of stage results" :stage "" :prod "" :query @query}))]
+        (when (some #(= :exact-match %) result-check)
+           (log {:type "result-position-match" :msg "exact match" :stage "get stage result" :prod "get prod result" :query @query}))
+        (when (some #(= :no-match %) result-check)
+          (log {:type "result-no-match" :msg "no match" :stage "get stage result" :prod "get prod result" :query @query}))
+        (when (some #(= :first-page %) result-check)
+            (log {:type "result-first-page" :msg "not an exact match" :stage "stage-blah" :prod "prod-blah" :query @query}))
+        (when-not (= (type result-check) clojure.lang.LazySeq) result-check)
+
+))
+
+(defn chk-json-keys
+  [log]
+  (let [stage-body (convert-to-json (:body @staging-rsp))
+        prod-body  (convert-to-json (:body @prod-rsp))
+        stage-keys (into [] (keys (first (take 1 (:items (:message (first stage-body)))))))
+        prod-keys (into [] (keys (first (take 1 (:items (:message (first prod-body)))))))]
+        (when-not (= stage-keys prod-keys)
+          (log {:type "json-keys-mismatch" :msg "json keys don't match" :stage stage-keys :prod prod-keys :query @query}))))
+
+
+(defn chk-result-totals
+  [log]
+  (let [stage-body (convert-to-json (:body @staging-rsp))
+        prod-body  (convert-to-json (:body @prod-rsp))
+        stage-results-num (:total-results (:message stage-body))
+        prod-results-num (:total-results (:message prod-body))
+        result-num-match (compare-result-num stage-results-num prod-results-num)
+        err-msg "Total number of results mismatch, 0 results found"
+        warn-msg "Total number of results mismatch"]
+        (when-not result-num-match
+          (if (or (= stage-results-num 0) (= prod-results-num 0))
+            (log {:type "result-total-error" :msg err-msg :stage stage-results-num :production prod-results-num :query @query})
+            (log {:type "result-total-warn" :msg warn-msg :stage stage-results-num :production prod-results-num :query @query})))))
+
+(defn status-code-check
+  [log]
+  (let [stage-status (:status @staging-rsp)
+        prod-status  (:status @prod-rsp)
+        equal-status? (status-code stage-status prod-status)
+        err-msg (str "non 200 status code errors")]
+        (when-not (and equal-status? (ok? stage-status))
+             (log {:type "status-error" :msg err-msg :stage stage-status :production prod-status :query @query}))))
+
+
 (defn compare-response2
   [query staging-rsp prod-rsp]
-  (plural-query? query))
+  (set-query query)
+  (set-prod-rsp prod-rsp)
+  (set-staging-rsp staging-rsp)
+  (get-results-id query)
+  @result-id)
 
 (defn compare-response
   [query staging-rsp prod-rsp]
@@ -213,11 +200,12 @@
        (set-staging-rsp staging-rsp)
        (status-code-check log-f)
        (when (= (count (filter #(and (= (:type %) "status-error") (= (:query %) query)) @result-log)) 0)
+           (get-results-id query)
            (when (plural-query? query)
-              (chk-result-totals {:stage (:body staging-rsp) :prod (:body prod-rsp) :query query} log-f)
+              (chk-result-totals log-f)
               (when (= (count (filter #(and (= (:type %) "result-total-error") (= (:query %) query)) @result-log)) 0)
-                (chk-json-keys {:stage (:body staging-rsp) :prod (:body prod-rsp) :query query} log-f)
-                (compare-results 2 log-f {:prod (:body prod-rsp) :stage (:body staging-rsp) :query query}))))
+                (chk-json-keys log-f)
+                (compare-results 2 log-f))))
         @result-log))
 
 
