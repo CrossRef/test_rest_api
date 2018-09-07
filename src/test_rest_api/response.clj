@@ -22,7 +22,7 @@
 
 
 (def available-resources
-  {:works :DOI :funders :id :members :id :licenses :URL :journals [:title :publisher]})
+  {:works :DOI :funders :id :members :id :licenses :URL :journals [:title :publisher] :types :id})
 
 (def singular-query
   {:prefixes :member})
@@ -102,8 +102,11 @@
  (->> rsp-body convert-to-json :message :items (map :DOI)))
 
 (defn api-results
- [rsp-body]
- (->> rsp-body convert-to-json :message :items))
+ [rsp-body type]
+ (condp = type
+   :singleton (->> rsp-body convert-to-json :message)
+   :plural (->> rsp-body convert-to-json :message :items)))
+
 
 (defn get-position
  "return mapping of prod to staging index of top n results"
@@ -138,14 +141,34 @@
   (let [intersect (top-n-intersection n)
         result-check (if (not (empty? intersect)) (process-position n) (log {:type "no-matching-results-found" :msg "Top 2 production results not found in the first page of stage results" :stage "" :prod "" :query @query}))]
         (when (some #(= :exact-match %) result-check)
-           (log {:type "result-position-match" :msg "exact match" :stage "get stage result" :prod "get prod result" :query @query}))
+           (log {:type "result-position-match" :msg "exact match" :stage "" :prod "" :query @query}))
         (when (some #(= :no-match %) result-check)
-          (log {:type "result-no-match" :msg "no match" :stage "get stage result" :prod "get prod result" :query @query}))
+          (log {:type "result-no-match" :msg "no match" :stage "" :prod "" :query @query}))
         (when (some #(= :first-page %) result-check)
-            (log {:type "result-first-page" :msg "not an exact match" :stage "stage-blah" :prod "prod-blah" :query @query}))
+            (log {:type "result-first-page" :msg "one or both prod results are on the first page of stage results" :stage "" :prod "" :query @query}))
         (when-not (= (type result-check) clojure.lang.LazySeq) result-check)
 
 ))
+
+(defn check-inequality
+  [prod stage log]
+  (let [equal-response (into {} (for [x prod] (filter #(= x %) stage)))
+        equal-key-set (set (keys equal-response))
+        prod-keys (keys prod)
+        prod-key-set (set (keys prod))
+        differences (into [] (clojure.set/difference prod-key-set equal-key-set))
+        stage-val (into [] (map #(% stage) differences))
+        prod-val (into [] (map #(% prod) differences))]
+    (log {:type "result-no-match" :msg "non equal values between the same keys in stage and production" :stage (zipmap differences stage-val) :prod (zipmap differences prod-val)})))
+
+
+(defn chk-singleton-response
+  [log]
+  (let [prod-result (api-results (:body @prod-rsp) :singleton)
+       stage-result (api-results (:body @staging-rsp) :singleton)]
+       (if-not (= prod-result stage-result)
+          (check-inequality prod-result stage-result log))))
+
 
 (defn chk-json-keys
   [log]
@@ -205,18 +228,11 @@
               (chk-result-totals log-f)
               (when (= (count (filter #(and (= (:type %) "result-total-error") (= (:query %) query)) @result-log)) 0)
                 (chk-json-keys log-f)
-                (compare-results 2 log-f))))
+                (compare-results 2 log-f)))
+            (when-not (plural-query? query)
+               (chk-singleton-response log-f)))
         @result-log))
 
 
   ;; heartbeat response is different -- look into that
-  ;; body - first two results in prod
-  ;; check if they occur in the results of staging
-  ;; if they do which position
-  ;; if same position, match the highest score out of a 5
-  ;; if within one or 2 positions, match it
-
-  ;;(json/parse-string (:body staging-rsp) true))
-
-  ;; why does subset behave so weirdly
-  ;; if I want to find position of something, is there a less painful way to do it
+  ;;  /styles
