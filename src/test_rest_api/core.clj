@@ -10,6 +10,8 @@
 
 (def production-api "http://api.crossref.org")
 
+(def output-file-name "results.tsv")
+
 ;; based on a population size of 200,000 with a 3% margin of error
 ;; verified on some stats websites
 (def total-sample-size 1062)
@@ -66,20 +68,33 @@
   [query]
   @(http/get query))
 
+  (defn write-response
+    [log]
+    (let [r-keys (keys (first (first log)))
+          filter-keys (remove #(= % :type) r-keys)
+          write-header (into [] (map clojure.string/capitalize (map name filter-keys)))
+          write-me (for [x log] (into [] (map #(% (first x)) filter-keys)))
+          all (cons write-header write-me)]
+     (with-open [wrtr (io/writer output-file-name)]
+        (doseq [i all]
+        (.write wrtr (str (clojure.string/join "\t" i) "\n"))))
+     (str "Output here: " output-file-name)))
+
 (defn run-query
   [query]
   (let [staging-query (get-query query :staging)
        production-query (get-query query :production)
        staging-response (query-api staging-query)
        production-response (query-api production-query)]
+       (println (str "Processing query: " query))
        (rsp/compare-response query staging-response production-response)))
 
 
 (defn run-me
     [curated-queries dataset]
     (let [query-samples (all-queries curated-queries dataset)
-          subset (take 5 query-samples)]
-     (for [q subset] (run-query q))))
+          subset (take 100 query-samples)]
+     (write-response (map run-query subset))))
 
 
 (defn -main
