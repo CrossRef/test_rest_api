@@ -19,11 +19,19 @@
 
 (def file-dir "files/")
 
+
 (defn file-line-number
   "gets number of lines for a specified file"
   [file]
-  (with-open [reader (io/reader (str file-dir file))]
-  (count (line-seq reader))))
+  (let [filename (str file-dir file)]
+   (try
+      (with-open [reader (io/reader filename)]
+      (count (line-seq reader)))
+      (catch Exception e (timbre/error (.getMessage e))))))
+
+(defn is-file-empty?
+  [file]
+  (> (file-line-number file) 0))
 
 (defn rest-sample-size
     "requires a file, gets the number of lines, returns difference between the total sample size and the file"
@@ -34,22 +42,26 @@
 (defn read-specific-line
     "reads a specified line"
     [file line-number]
-    (with-open [rdr (io/reader (str file-dir file))]
-    (nth (line-seq rdr) line-number)))
+    (let [filename (str file-dir file)]
+    (try
+      (with-open [rdr (io/reader filename)]
+      (nth (line-seq rdr) line-number))
+      (catch Exception e (timbre/error (.getMessage e))))))
 
 (defn sample-lines
     "gets random line numbers to read"
     [curated-queries large-dataset]
     (let [lines (file-line-number large-dataset)
           limit (rest-sample-size curated-queries)]
-    (reservoir/sample (range lines) limit)))
+      (reservoir/sample (range lines) limit)))
 
 (defn read-curated-queries
     [curated-queries]
-    (with-open [rdr (io/reader (str file-dir curated-queries))]
-    (doall (line-seq rdr))))
-
-
+    (let [filename (str file-dir curated-queries)]
+     (try
+       (with-open [reader (io/reader filename)]
+       (doall (line-seq reader)))
+       (catch Exception e (timbre/error (.getMessage e))))))
 
 (defn all-queries
     "concatenates both types of queries"
@@ -83,10 +95,12 @@
           write-header (into [] (map clojure.string/capitalize (map name filter-keys)))
           write-me (for [x log] (into [] (map #(% (first x)) filter-keys)))
           all (cons write-header write-me)]
-     (with-open [wrtr (io/writer output-file-name)]
-        (doseq [i all]
-        (.write wrtr (str (clojure.string/join "\t" i) "\n"))))
-     (str "Output here: " output-file-name)))
+     (try
+       (with-open [wrtr (io/writer output-file-name)]
+          (doseq [i all]
+          (.write wrtr (str (clojure.string/join "\t" i) "\n"))))
+          (timbre/info (str "Output here: " output-file-name))
+       (catch Exception e (timbre/error (.getMessage e))))))
 
 (defn run-query
   [query]
@@ -103,8 +117,10 @@
 (defn run-me
     [curated-queries dataset]
     (let [query-samples (all-queries curated-queries dataset)
-          subset (take 100 query-samples)]
-     (write-response (map run-query subset))))
+          subset (take 300 query-samples)]
+     (if (empty? query-samples)
+       (timbre/error (str "Empty query set: script can not run"))
+       (write-response (map run-query subset)))))
 
 
 (defn -main
