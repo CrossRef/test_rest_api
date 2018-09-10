@@ -139,13 +139,13 @@
 (defn compare-results
   [n log]
   (let [intersect (top-n-intersection n)
-        result-check (if (not (empty? intersect)) (process-position n) (log {:type "no-matching-results-found" :msg "Top 2 production results not found in the first page of stage results" :stage "" :prod "" :query @query}))]
+        result-check (if (not (empty? intersect)) (process-position n) (log {:type "no-matching-results-found" :msg "Top 2 production results not found in the first page of stage results" :stage "" :production "" :query @query}))]
         (when (some #(= :exact-match %) result-check)
-           (log {:type "result-position-match" :msg "exact match" :stage "" :prod "" :query @query}))
+           (log {:type "result-position-match" :msg "exact match" :stage "" :production "" :query @query}))
         (when (some #(= :no-match %) result-check)
-          (log {:type "result-no-match" :msg "no match" :stage "" :prod "" :query @query}))
+          (log {:type "result-no-match" :msg "no match" :stage "" :production "" :query @query}))
         (when (some #(= :first-page %) result-check)
-            (log {:type "result-first-page" :msg "one or both prod results are on the first page of stage results" :stage "" :prod "" :query @query}))
+            (log {:type "result-first-page" :msg "one or both prod results are on the first page of stage results" :stage "" :production "" :query @query}))
         (when-not (= (type result-check) clojure.lang.LazySeq) result-check)
 
 ))
@@ -159,7 +159,7 @@
         differences (into [] (clojure.set/difference prod-key-set equal-key-set))
         stage-val (into [] (map #(% stage) differences))
         prod-val (into [] (map #(% prod) differences))]
-    (log {:type "result-no-match" :msg "non equal values between the same keys in stage and production" :stage (zipmap differences stage-val) :prod (zipmap differences prod-val)})))
+    (log {:type "result-no-match" :msg "non equal values between the same keys in stage and production" :stage (zipmap differences stage-val) :production (zipmap differences prod-val) :query @query})))
 
 
 (defn chk-singleton-response
@@ -177,7 +177,7 @@
         stage-keys (into [] (keys (first (take 1 (:items (:message (first stage-body)))))))
         prod-keys (into [] (keys (first (take 1 (:items (:message (first prod-body)))))))]
         (when-not (= stage-keys prod-keys)
-          (log {:type "json-keys-mismatch" :msg "json keys don't match" :stage stage-keys :prod prod-keys :query @query}))))
+          (log {:type "json-keys-mismatch" :msg "json keys don't match" :stage stage-keys :production prod-keys :query @query}))))
 
 
 (defn chk-result-totals
@@ -202,6 +202,7 @@
         err-msg (str "non 200 status code errors")]
         (when-not (and equal-status? (ok? stage-status))
              (log {:type "status-error" :msg err-msg :stage stage-status :production prod-status :query @query}))))
+
 
 
 (defn compare-response2
@@ -231,6 +232,8 @@
                 (compare-results 2 log-f)))
             (when-not (plural-query? query)
                (chk-singleton-response log-f)))
+        (when (empty? (filter #(= (:query %) query) @result-log))
+           (log-f {:type "exact-match" :msg "exact match" :stage "" :production "" :query query}))
         @result-log))
 
 
