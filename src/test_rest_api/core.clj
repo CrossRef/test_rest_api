@@ -110,5 +110,4 @@
 (defn -main
     "Benchmarks queries against rest-api instances"
     [curated-queries dataset]
-    (if-let [query-samples (<= (rest-sample-size curated-queries) 0)]  (read-curated-queries curated-queries)
-    (all-queries curated-queries dataset)))
+    (run-me curated-queries dataset))
