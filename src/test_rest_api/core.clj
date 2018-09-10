@@ -4,7 +4,8 @@
             [bigml.sampling.reservoir :as reservoir]
             [clojure.java.io :as io]
             [test_rest_api.response :as rsp]
-            [cheshire.core :as json]))
+            [cheshire.core :as json]
+            [taoensso.timbre :as timbre]))
 
 (def staging-api "http://api-es-staging.crossref.org")
 
@@ -68,9 +69,16 @@
   [query]
   @(http/get query))
 
-  (defn write-response
-    [log]
-    (let [r-keys (keys (first (first log)))
+(defn process-error-response
+  [stage prod]
+  (when-not (nil? stage)
+    (timbre/error stage))
+  (when-not (nil? prod)
+      (timbre/error prod)))
+
+(defn write-response
+  [log]
+  (let [r-keys (keys (first (first log)))
           filter-keys (remove #(= % :type) r-keys)
           write-header (into [] (map clojure.string/capitalize (map name filter-keys)))
           write-me (for [x log] (into [] (map #(% (first x)) filter-keys)))
@@ -86,8 +94,10 @@
        production-query (get-query query :production)
        staging-response (query-api staging-query)
        production-response (query-api production-query)]
-       (println (str "Processing query: " query))
-       (rsp/compare-response query staging-response production-response)))
+       (if (or (contains? staging-response :error) (contains? production-response :error))
+         (process-error-response (:error staging-response) (:error production-response))
+         (rsp/compare-response query staging-response production-response))))
+
 
 
 (defn run-me

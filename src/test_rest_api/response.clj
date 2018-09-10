@@ -3,7 +3,8 @@
             [org.httpkit.client :as http]
             [clojure.java.io :as io]
             [cheshire.core :as json]
-            [clojure.set]))
+            [clojure.set]
+            [taoensso.timbre :as timbre]))
 
 (def prod-rsp (atom ""))
 
@@ -219,6 +220,7 @@
         log-f (fn [item]
                 (swap! result-log
                        #(cons item %)))]
+       (timbre/info (str "Processing query: " query))
        (set-query query)
        (set-prod-rsp prod-rsp)
        (set-staging-rsp staging-rsp)
@@ -238,4 +240,3 @@
 
 
   ;; heartbeat response is different -- look into that
-  ;;  /styles
