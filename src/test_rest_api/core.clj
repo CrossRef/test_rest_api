@@ -95,17 +95,18 @@
 (defn write-response
   "outputs a tsv file by parsing through the received messages"
   [log]
-  (let [r-keys (keys (first (first log)))
-          filter-keys (remove #(= % :type) r-keys)
-          write-header (into [] (map clojure.string/capitalize (map name filter-keys)))
-          write-me (for [x log] (into [] (map #(% (first x)) filter-keys)))
-          all (cons write-header write-me)]
-     (try
-       (with-open [wrtr (io/writer output-file-name)]
+  (let [write-messages (map #(dissoc (first %) :type) log)
+        header-keys (keys (first write-messages))
+        write-header (into [] (map clojure.string/capitalize (map name header-keys)))
+        write-me (for [x write-messages] (into [] (map #(% x) header-keys)))
+        all (cons write-header write-me)]
+    (try
+      (with-open [wrtr (io/writer output-file-name)]
           (doseq [i all]
-          (.write wrtr (str (clojure.string/join "\t" i) "\n"))))
-          (timbre/info (str "Output here: " output-file-name))
-       (catch Exception e (timbre/error (.getMessage e))))))
+            (.write wrtr (str (clojure.string/join "\t" i) "\n"))))
+            (timbre/info (str "Output here: " output-file-name))
+            (catch Exception e (timbre/error (.getMessage e))))))
+
 
 (defn run-query
   "runs one query"
@@ -124,7 +125,7 @@
     "iterates through the whole query set"
     [curated-queries dataset]
     (let [query-samples (all-queries curated-queries dataset)
-          subset (take 50 query-samples)]
+          subset (take 350 query-samples)]
      (if (empty? query-samples)
        (timbre/error (str "Empty query set: script can not run"))
        (write-response (map run-query subset)))))
