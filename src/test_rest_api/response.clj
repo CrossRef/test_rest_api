@@ -6,6 +6,11 @@
             [clojure.set]
             [taoensso.timbre :as timbre]))
 
+; global vars
+; can't use delay because it caches the value across threads
+; and that's not the behavior I want
+; I want it to change per call
+; but be accessible across the methods to prevent having to pass all of these values to all methods
 (def prod-rsp (atom ""))
 
 (def staging-rsp (atom ""))
@@ -23,18 +28,22 @@
 
 
 (def available-resources
+  "hashmap of resources and their respective unique identifiers"
   {:works :DOI :funders :id :members :id :licenses :URL :journals [:title :publisher] :types :id})
 
 (def singular-query
+  "for prefixes"
   {:prefixes :member})
 
 
 (def ar-vector
+  "vector of keys for available resources"
   (into [] (map name (keys available-resources))))
 
 (def version "v1")
 
 (defn split-query
+  "splits up the route fragment and removes the query string"
   [query]
   (let [split-q (filter #(not (= % version)) (remove clojure.string/blank? (clojure.string/split query #"[]\/|?]")))
       last-fragment (last split-q)]
@@ -43,12 +52,14 @@
        split-q)))
 
 (defn plural-query?
+  "checks to see if it's a list query"
   [query]
   (let [q (into [] (split-query query))
         last-route (last q)]
    (if (some #(= % last-route) ar-vector) true false)))
 
 (defn get-unique-id-type
+  "get the unique id of resource"
   [query]
   (let [q (into [] (split-query query))
         first-route (first q)
@@ -60,20 +71,19 @@
       :else false)))
 
 (defn get-results-id
+  "method to set the global var result id"
   [query]
   (reset! result-id (get-unique-id-type query)))
 
 (def status-ok 200)
 
-(defn message
-  [msg]
-  (clojure.string/split msg #","))
-
 (defn convert-to-json
+  "converts to json"
   [rsp]
   (json/parse-string rsp true))
 
 (defn status-code
+  "checks if status code between two responses is equal"
   [stage prod]
   (= stage prod))
 
@@ -82,14 +92,17 @@
   (= status-ok status))
 
 (defn compare-result-num
+  "are the total results equal across the two responses"
   [stage-results prod-results]
   (= stage-results prod-results))
 
 (defn process-compound-key
+  "this is for a resource requiring a compound key"
   [rsp-body id]
      (for [r rsp-body] (apply str (map #(% r) id))))
 
 (defn api-results->plural-id
+  "returns the values of unique id by resource"
   [rsp-body]
   (let [body (->> rsp-body convert-to-json :message :items)
         id @result-id]
@@ -99,10 +112,12 @@
 
 
 (defn api-results->doi-seq
+  "returns dois"
  [rsp-body]
  (->> rsp-body convert-to-json :message :items (map :DOI)))
 
 (defn api-results
+  "returns the json body depending on if it's a singleton or list query"
  [rsp-body type]
  (condp = type
    :singleton (->> rsp-body convert-to-json :message)
@@ -119,12 +134,14 @@
 
 
 (defn top-n-intersection
+  "returns the intersection of the two sets(stage and prod), requires a number to process the top n of production results"
  [n]
  (let [prod-ids (set (take n (api-results->plural-id (:body @prod-rsp))))
        stage-ids (set (api-results->plural-id (:body @staging-rsp)))]
    (clojure.set/intersection prod-ids stage-ids)))
 
 (defn process-position
+  "checks to see if returned prod and stage positions are equal"
   [n]
   (for [x (get-position n)]
       (let [prod-position (first x)
@@ -138,6 +155,7 @@
             :first-page))))
 
 (defn compare-results
+  "returns messages of intersection and position tests"
   [n log]
   (let [intersect (top-n-intersection n)
         result-check (if (not (empty? intersect)) (process-position n) (log {:type "no-matching-results-found" :msg "Top 2 production results not found in the first page of stage results" :stage "" :production "" :query @query}))]
@@ -152,6 +170,7 @@
 ))
 
 (defn check-inequality
+  "returns hash-map of responses where there are unequal values between stage and prod"
   [prod stage log]
   (let [equal-response (into {} (for [x prod] (filter #(= x %) stage)))
         equal-key-set (set (keys equal-response))
@@ -164,6 +183,7 @@
 
 
 (defn chk-singleton-response
+  "processes singleton query response"
   [log]
   (let [prod-result (api-results (:body @prod-rsp) :singleton)
        stage-result (api-results (:body @staging-rsp) :singleton)]
@@ -172,6 +192,7 @@
 
 
 (defn chk-json-keys
+  "checks first level of json keys to see if they are equal between prod and stage"
   [log]
   (let [stage-body (convert-to-json (:body @staging-rsp))
         prod-body  (convert-to-json (:body @prod-rsp))
@@ -182,6 +203,7 @@
 
 
 (defn chk-result-totals
+  "returns messages for result totals"
   [log]
   (let [stage-body (convert-to-json (:body @staging-rsp))
         prod-body  (convert-to-json (:body @prod-rsp))
@@ -196,6 +218,7 @@
             (log {:type "result-total-warn" :msg warn-msg :stage stage-results-num :production prod-results-num :query @query})))))
 
 (defn status-code-check
+  "returns message on status code checks"
   [log]
   (let [stage-status (:status @staging-rsp)
         prod-status  (:status @prod-rsp)
@@ -205,16 +228,8 @@
              (log {:type "status-error" :msg err-msg :stage stage-status :production prod-status :query @query}))))
 
 
-
-(defn compare-response2
-  [query staging-rsp prod-rsp]
-  (set-query query)
-  (set-prod-rsp prod-rsp)
-  (set-staging-rsp staging-rsp)
-  (get-results-id query)
-  @result-id)
-
 (defn compare-response
+  "wrapper for running all tests"
   [query staging-rsp prod-rsp]
   (let [result-log (atom [])
         log-f (fn [item]

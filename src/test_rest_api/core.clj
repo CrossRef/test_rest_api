@@ -30,6 +30,7 @@
       (catch Exception e (timbre/error (.getMessage e))))))
 
 (defn is-file-empty?
+  "returns a boolean check to see if file is empty"
   [file]
   (> (file-line-number file) 0))
 
@@ -56,6 +57,7 @@
       (reservoir/sample (range lines) limit)))
 
 (defn read-curated-queries
+    "reads a file that contains curated queries"
     [curated-queries]
     (let [filename (str file-dir curated-queries)]
      (try
@@ -72,6 +74,7 @@
          (concat cq uq)))
 
 (defn get-query
+  "returns a url for the type of rest-api being queried"
   [query type]
   (cond
     (= type :production) (str production-api query)
@@ -82,6 +85,7 @@
   @(http/get query))
 
 (defn process-error-response
+  "processes an error response after querying the stage and prod instances of the rest-api"
   [stage prod]
   (when-not (nil? stage)
     (timbre/error stage))
@@ -89,6 +93,7 @@
       (timbre/error prod)))
 
 (defn write-response
+  "outputs a tsv file by parsing through the received messages"
   [log]
   (let [r-keys (keys (first (first log)))
           filter-keys (remove #(= % :type) r-keys)
@@ -103,6 +108,7 @@
        (catch Exception e (timbre/error (.getMessage e))))))
 
 (defn run-query
+  "runs one query"
   [query]
   (let [staging-query (get-query query :staging)
        production-query (get-query query :production)
@@ -115,9 +121,10 @@
 
 
 (defn run-me
+    "iterates through the whole query set"
     [curated-queries dataset]
     (let [query-samples (all-queries curated-queries dataset)
-          subset (take 300 query-samples)]
+          subset (take 50 query-samples)]
      (if (empty? query-samples)
        (timbre/error (str "Empty query set: script can not run"))
        (write-response (map run-query subset)))))
