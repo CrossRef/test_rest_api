@@ -1,0 +1,7 @@
+version: '3'
+services:
+  api:
+    build: .
+    command: lein run "all_curated_queries.csv" "uncurated_queries.csv"
+    volumes:
+      - .:/usr/src/app
