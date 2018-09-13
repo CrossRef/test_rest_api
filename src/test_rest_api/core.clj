@@ -82,7 +82,9 @@
 
 (defn query-api
   [query]
-  @(http/get query))
+  (try
+    @(http/get query)
+    (catch Exception e (timbre/error (.getMessage e)))))
 
 (defn process-error-response
   "processes an error response after querying the stage and prod instances of the rest-api"
@@ -124,11 +126,10 @@
 (defn run-me
     "iterates through the whole query set"
     [curated-queries dataset]
-    (let [query-samples (all-queries curated-queries dataset)
-          subset (take 350 query-samples)]
+    (let [query-samples (all-queries curated-queries dataset)]
      (if (empty? query-samples)
        (timbre/error (str "Empty query set: script can not run"))
-       (write-response (map run-query subset)))))
+       (write-response (map run-query query-samples)))))
 
 
 (defn -main
