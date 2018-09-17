@@ -125,8 +125,8 @@
 
 (defn run-me
     "iterates through the whole query set"
-    [curated-queries dataset]
-    (let [query-samples (all-queries curated-queries dataset)]
+    [curated-queries dataset number]
+    (let [query-samples (if (nil? number) (all-queries curated-queries dataset) (take number (all-queries curated-queries dataset)))]
      (if (empty? query-samples)
        (timbre/error (str "Empty query set: script can not run"))
        (write-response (map run-query query-samples)))))
@@ -134,5 +134,10 @@
 
 (defn -main
     "Benchmarks queries against rest-api instances"
-    [curated-queries dataset]
-    (run-me curated-queries dataset))
+    [curated-queries dataset number]
+    (let [num (if-not (nil? number) (Integer. number))]
+      (when (> num total-sample-size)
+        (timbre/warn (str "User specified number: " num " is bigger than sample size: " total-sample-size)))
+      (if (and (> num 0) (< num total-sample-size))
+        (run-me curated-queries dataset num)
+        (run-me curated-queries dataset nil))))
