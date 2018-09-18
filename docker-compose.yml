@@ -3,7 +3,7 @@ services:
   testscript:
     # if you want to run the whole shebang,
     # uncomment the first command, otherwise the
-    # other command runs a sample of 350 queries
+    # other command runs a sample of 200 queries
     image: eshadatta/test-rest-api:demo
     #command: lein run "all_curated_queries.csv" "uncurated_queries.csv"
     command: lein run "all_curated_queries.csv" "uncurated_queries.csv" 200
