@@ -138,6 +138,6 @@
     (let [num (if-not (nil? number) (Integer. number))]
       (when (> num total-sample-size)
         (timbre/warn (str "User specified number: " num " is bigger than sample size: " total-sample-size)))
-      (if (and (> num 0) (< num total-sample-size))
+      (if (and (> num 0) (<= num total-sample-size))
         (run-me curated-queries dataset num)
         (run-me curated-queries dataset nil))))
