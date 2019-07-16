@@ -6,6 +6,7 @@ services:
     # other command runs a sample of 200 queries
     image: eshadatta/test-rest-api:demo
     #command: lein run "all_curated_queries.csv" "uncurated_queries.csv"
-    command: lein run "all_curated_queries.csv" "uncurated_queries.csv" 200
+    command: lein run "all_curated_queries.csv" "uncurated_queries.csv" 5
     volumes:
       - .:/usr/src/app
+      - ./.m2-cache:/root/.m2

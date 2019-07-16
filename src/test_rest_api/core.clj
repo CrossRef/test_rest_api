@@ -94,7 +94,7 @@
   (when-not (nil? prod)
       (timbre/error prod)))
 
-(defn write-response
+(defn write-response!
   "outputs a tsv file by parsing through the received messages"
   [log]
   (let [write-messages (map #(dissoc (first %) :type) log)
@@ -106,8 +106,8 @@
       (with-open [wrtr (io/writer output-file-name)]
           (doseq [i all]
             (.write wrtr (str (clojure.string/join "\t" i) "\n"))))
-            (timbre/info (str "Output here: " output-file-name))
-            (catch Exception e (timbre/error (.getMessage e))))))
+      (timbre/info "Output here: " output-file-name)
+      (catch Exception e (timbre/error (.getMessage e))))))
 
 
 (defn run-query
@@ -121,23 +121,45 @@
          (process-error-response (:error staging-response) (:error production-response))
          (rsp/compare-response query staging-response production-response))))
 
+;
+;
+; (defn run-me
+;     "iterates through the whole query set"
+;     [curated-queries dataset number]
+;     (let [query-samples (all-queries curated-queries dataset)
+;           query-samples (if (nil? number)
+;                             query-samples
+;                             (take number query-samples))]
+;      (if (empty? query-samples)
+;        (timbre/error "Empty query set: script can not run")
+;        (write-response! (map run-query query-samples)))))
 
-
-(defn run-me
-    "iterates through the whole query set"
-    [curated-queries dataset number]
-    (let [query-samples (if (nil? number) (all-queries curated-queries dataset) (take number (all-queries curated-queries dataset)))]
-     (if (empty? query-samples)
-       (timbre/error (str "Empty query set: script can not run"))
-       (write-response (map run-query query-samples)))))
+;
+; (defn -main
+;     "Benchmarks queries against rest-api instances"
+;     [curated-queries dataset number]
+;
+;     (let [ num (some-> number Integer.)]
+;       (when (> num total-sample-size)
+;         (timbre/warn "User specified number: " num " is bigger than sample size: " total-sample-size))
+;       (if (and (> num 0) (<= num total-sample-size))
+;         (run-me curated-queries dataset num)
+;         (run-me curated-queries dataset nil))))
 
 
 (defn -main
-    "Benchmarks queries against rest-api instances"
-    [curated-queries dataset number]
-    (let [num (if-not (nil? number) (Integer. number))]
-      (when (> num total-sample-size)
-        (timbre/warn (str "User specified number: " num " is bigger than sample size: " total-sample-size)))
-      (if (and (> num 0) (<= num total-sample-size))
-        (run-me curated-queries dataset num)
-        (run-me curated-queries dataset nil))))
+  [curated-queries dataset number]
+  (let [sample-size (some-> number Integer.)
+        limit-f (if sample-size (partial take sample-size)
+                                identity)]
+    (when (and sample-size
+               (> sample-size total-sample-size))
+      (timbre/fatal "User specified number:"
+                    num
+                    "is bigger than sample size:"
+                    total-sample-size))
+
+    (->> (all-queries curated-queries dataset)
+          limit-f
+          (map run-query)
+          write-response!)))
